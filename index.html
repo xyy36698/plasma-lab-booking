@@ -161,10 +161,27 @@ $('book').onclick = async ()=>{
     if(error){ setMsg(error.message.includes('exclusion')?'Time conflict on update.':'Update failed: ' + error.message); }
     else { setMsg('Updated!', true); editingId=null; $('cancelEdit').style.display='none'; $('book').textContent='➕ Book now'; listBookings(); }
   } else {
-    const { error } = await supabase.from('bookings').insert(booking);
-    if(error){ setMsg(error.message.includes('exclusion')?'Time conflict: already booked.':'Create failed: ' + error.message); }
-    else { setMsg('Booked successfully!', true); listBookings(); }
+  const { data, error } = await supabase.rpc('create_booking', {
+    p_device: booking.device,
+    p_date: booking.date,
+    p_start: booking.start,
+    p_end: booking.end,
+    p_name: booking.name,
+    p_email: booking.email,
+    p_notes: booking.notes || null
+  });
+
+  if (error) {
+    // 你函数里会抛 "time slot is already booked"
+    const msg =
+      error.message.includes('already booked') ? 'Time conflict: already booked.' :
+      'Create failed: ' + error.message;
+    setMsg(msg);
+  } else {
+    setMsg('Booked successfully!', true);
+    listBookings();
   }
+}
 };
 
 function startEdit(id){
