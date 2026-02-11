@@ -4,39 +4,44 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Plasma Lab Booking – Supabase</title>
-<link rel="preconnect" href="https://unpkg.com" />
+
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
 <style>
-  body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; background:#f6f9ff; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; background:#f6f9ff; }
   .container { max-width: 1000px; margin: 0 auto; padding: 22px; }
-  h1 { margin: 0 0 6px; color:#0e1726; } .sub { color:#5b6b80; margin-bottom:14px }
+  h1 { margin: 0 0 6px; color:#0e1726; }
+  .sub { color:#5b6b80; margin-bottom:14px }
   .card { background:#fff; border:1px solid #e1e9ff; border-radius:14px; box-shadow:0 6px 24px rgba(16,37,71,.06); margin-bottom:14px }
   .section { padding:16px }
   label { display:block; font-size:.9rem; color:#5b6b80; margin:6px 0 2px }
-  input, select, textarea { width:100%; padding:10px 12px; border:1px solid #d7e2ff; border-radius:12px; background:#fff }
+  input, select, textarea { width:100%; padding:10px 12px; border:1px solid #d7e2ff; border-radius:12px }
   textarea { min-height:80px }
   .row { display:grid; gap:12px }
   @media(min-width:640px){ .row{ grid-template-columns:1fr 1fr } }
-  .btn { display:inline-flex; align-items:center; gap:6px; padding:10px 14px; border-radius:12px; border:1px solid #cfe0ff; background:#2b7fff; color:#fff; cursor:pointer }
+  .btn { padding:10px 14px; border-radius:12px; border:1px solid #cfe0ff; background:#2b7fff; color:#fff; cursor:pointer }
   .btn.ghost { background:#fff; color:#2456d1 }
   .btn.danger { background:#e05666; border-color:#f6c9ce }
   .list { display:flex; flex-direction:column; gap:10px }
-  .item { border:1px solid #e8eef8; border-radius:12px; padding:12px; display:flex; justify-content:space-between; gap:10px }
+  .item { border:1px solid #e8eef8; border-radius:12px; padding:12px; display:flex; justify-content:space-between }
   .muted { color:#5b6b80 }
-  .msg { margin: 8px 0; } .ok{color:#0b7a45} .err{color:#b4232c}
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.85rem }
+  .msg { margin: 8px 0; }
+  .ok{color:#0b7a45} .err{color:#b4232c}
 </style>
 </head>
+
 <body>
 <div class="container">
   <h1>Plasma Bioengineering Lab – Device Booking</h1>
-  <div class="sub">Supabase backend • Open create/edit/delete • Realtime</div>
+  <div class="sub">Supabase backend • RPC booking • Realtime</div>
   <div id="msg" class="msg"></div>
 
   <div class="card"><div class="section">
     <h2>Book a Device</h2>
+
     <div class="row">
-      <div><label>Device</label>
+      <div>
+        <label>Device</label>
         <select id="device">
           <option>Main Plasma system (PIII and IAPP)</option>
           <option>Horizontal plasma chamber</option>
@@ -47,18 +52,25 @@
           <option>Microscope</option>
         </select>
       </div>
-      <div><label>Date</label><input type="date" id="date" /></div>
+      <div>
+        <label>Date</label>
+        <input type="date" id="date" />
+      </div>
     </div>
+
     <div class="row">
       <div><label>Start</label><input type="time" id="start" /></div>
       <div><label>End</label><input type="time" id="end" /></div>
     </div>
+
     <div class="row">
       <div><label>Your name</label><input id="name" /></div>
       <div><label>Email</label><input id="email" type="email" /></div>
     </div>
+
     <div><label>Notes</label><textarea id="notes"></textarea></div>
-    <div style="display:flex;gap:10px;margin-top:10px">
+
+    <div style="margin-top:10px;display:flex;gap:10px">
       <button id="book" class="btn">➕ Book now</button>
       <button id="cancelEdit" class="btn ghost" style="display:none">Cancel edit</button>
     </div>
@@ -69,145 +81,120 @@
     <div id="list" class="list"></div>
     <div id="empty" class="muted">No bookings yet.</div>
   </div></div>
-
-  <div class="card"><div class="section">
-    <h2>Admin – One-time SQL</h2>
-    <p class="muted">Paste into Supabase → SQL Editor and run once.</p>
-    <textarea id="sql" class="mono" style="width:100%;height:260px;border:1px solid #d9e2f0;border-radius:12px;padding:10px">
-create extension if not exists btree_gist;
-create table if not exists public.bookings (
-  id uuid primary key default gen_random_uuid(),
-  device text not null,
-  date date not null,
-  start time not null,
-  "end" time not null,
-  name text not null,
-  email text not null,
-  notes text,
-  created_at timestamptz default now(),
-  ts tsrange generated always as (
-    tsrange((date::timestamp + start), (date::timestamp + "end"), '[)')
-  ) stored,
-  constraint chk_time_order check ("end" > start)
-);
-alter table public.bookings drop constraint if exists bookings_no_overlap;
-alter table public.bookings add constraint bookings_no_overlap exclude using gist (device with =, ts with &&);
-alter table public.bookings enable row level security;
-drop policy if exists "public read" on public.bookings;
-drop policy if exists "public insert" on public.bookings;
-drop policy if exists "public update" on public.bookings;
-drop policy if exists "public delete" on public.bookings;
-create policy "public read"   on public.bookings for select to anon using (true);
-create policy "public insert" on public.bookings for insert to anon with check (true);
-create policy "public update" on public.bookings for update to anon using (true) with check (true);
-create policy "public delete" on public.bookings for delete to anon using (true);
-    </textarea>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-      <button id="copySql" class="btn ghost">📋 Copy SQL</button>
-      <span id="sqlMsg" class="muted"></span>
-    </div>
-  </div></div>
-
 </div>
 
 <script>
+/* ========= Supabase ========= */
 const SUPABASE_URL = "https://mbaacwnxdkeseiqybvrj.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1iYWFjd254ZGtlc2VpcXlidnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzg5MzEsImV4cCI6MjA3MzY1NDkzMX0.vjQhoXxkSK3xTgqKh_sThN-6jIkzAcePtfkpnkt1Eq8";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_KEY = "你的 anon key（保持你原来的）";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* ========= Helpers ========= */
 const $ = (id)=>document.getElementById(id);
-function setMsg(t, ok=false){ $('msg').innerHTML = t ? '<span class="' + (ok?'ok':'err') + '">' + t + '</span>' : '' }
-function escapeHtml(s){ return String(s||'').replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+function setMsg(t, ok=false){
+  $('msg').innerHTML = t ? `<span class="${ok?'ok':'err'}">${t}</span>` : '';
+}
 
+/* ========= List ========= */
 async function listBookings(){
   const today = new Date().toISOString().slice(0,10);
-  const { data, error } = await supabase.from('bookings').select('*').gte('date', today).order('date',{ascending:true}).order('start',{ascending:true});
-  const list = $('list'); const empty = $('empty');
-  if(error){ setMsg('Load failed: ' + error.message); list.innerHTML=''; empty.style.display='block'; return; }
-  list.innerHTML='';
-  (data||[]).forEach(b=>{
-    const div = document.createElement('div'); div.className='item';
-    div.innerHTML = '<div>' +
-      '<div><strong>' + escapeHtml(b.device) + '</strong></div>' +
-      '<div class="muted">' + b.date + ' • ' + b.start + '–' + b.end + '</div>' +
-      '<div class="muted">' + escapeHtml(b.name) + ' · ' + escapeHtml(b.email) + '</div>' +
-      (b.notes ? '<div class="muted" style="font-size:.78rem;margin-top:4px">' + escapeHtml(b.notes) + '</div>' : '') +
-      '</div>' +
-      '<div style="display:flex;gap:8px;align-items:center">' +
-      '<button class="btn ghost" onclick="startEdit(\'' + b.id + '\')">✏️ Edit</button>' +
-      '<button class="btn danger" onclick="removeBooking(\'' + b.id + '\')">🗑 Delete</button>' +
-      '</div>';
+  const { data, error } = await supabaseClient
+    .from('bookings')
+    .select('*')
+    .gte('date', today)
+    .order('date')
+    .order('start');
+
+  const list = $('list');
+  const empty = $('empty');
+  list.innerHTML = '';
+
+  if(error){
+    setMsg(error.message);
+    empty.style.display='block';
+    return;
+  }
+
+  data.forEach(b=>{
+    const div = document.createElement('div');
+    div.className='item';
+    div.innerHTML = `
+      <div>
+        <strong>${b.device}</strong><br/>
+        <span class="muted">${b.date} • ${b.start} – ${b.end}</span><br/>
+        <span class="muted">${b.name} · ${b.email}</span>
+      </div>
+      <button class="btn danger" onclick="removeBooking('${b.id}')">🗑</button>
+    `;
     list.appendChild(div);
   });
-  empty.style.display = (data&&data.length)? 'none':'block';
+
+  empty.style.display = data.length ? 'none':'block';
 }
 
-let editingId = null;
-$('book').onclick = async ()=>{
-  const booking = {
-    device: $('device').value,
-    date: $('date').value,
-    start: $('start').value,
-    end: $('end').value,
-    name: $('name').value.trim(),
-    email: $('email').value.trim(),
-    notes: $('notes').value.trim()
-  };
-  if(!booking.device || !booking.date || !booking.start || !booking.end || !booking.name || !booking.email){ setMsg('Please complete all required fields.'); return; }
-  if(booking.end <= booking.start){ setMsg('End time must be after start time.'); return; }
+/* ========= Booking ========= */
+window.addEventListener('DOMContentLoaded', ()=>{
+  $('date').value = new Date().toISOString().slice(0,10);
+  listBookings();
 
-  if(editingId){
-    const { error } = await supabase.from('bookings').update(booking).eq('id', editingId);
-    if(error){ setMsg(error.message.includes('exclusion')?'Time conflict on update.':'Update failed: ' + error.message); }
-    else { setMsg('Updated!', true); editingId=null; $('cancelEdit').style.display='none'; $('book').textContent='➕ Book now'; listBookings(); }
-  } else {
-  const { data, error } = await supabase.rpc('create_booking', {
-    p_device: booking.device,
-    p_date: booking.date,
-    p_start: booking.start,
-    p_end: booking.end,
-    p_name: booking.name,
-    p_email: booking.email,
-    p_notes: booking.notes || null
-  });
+  $('book').addEventListener('click', async ()=>{
+    const booking = {
+      device: $('device').value,
+      date: $('date').value,
+      start: $('start').value,
+      end: $('end').value,
+      name: $('name').value.trim(),
+      email: $('email').value.trim(),
+      notes: $('notes').value.trim()
+    };
 
-  if (error) {
-    // 你函数里会抛 "time slot is already booked"
-    const msg =
-      error.message.includes('already booked') ? 'Time conflict: already booked.' :
-      'Create failed: ' + error.message;
-    setMsg(msg);
-  } else {
+    if(!booking.device || !booking.date || !booking.start || !booking.end || !booking.name || !booking.email){
+      setMsg('Please complete all required fields.');
+      return;
+    }
+
+    if(booking.end <= booking.start){
+      setMsg('End time must be after start.');
+      return;
+    }
+
+    const { error } = await supabaseClient.rpc('create_booking', {
+      p_device: booking.device,
+      p_date: booking.date,
+      p_start: booking.start,
+      p_end: booking.end,
+      p_name: booking.name,
+      p_email: booking.email,
+      p_notes: booking.notes || null
+    });
+
+    if(error){
+      setMsg(
+        error.message.includes('already booked')
+          ? 'Time conflict: already booked.'
+          : error.message
+      );
+      return;
+    }
+
     setMsg('Booked successfully!', true);
     listBookings();
-  }
-}
-};
-
-function startEdit(id){
-  editingId = id;
-  supabase.from('bookings').select('*').eq('id', id).single().then(({data,error})=>{
-    if(error){ setMsg('Load booking failed: ' + error.message); return; }
-    $('device').value=data.device; $('date').value=data.date; $('start').value=data.start; $('end').value=data.end; $('name').value=data.name; $('email').value=data.email; $('notes').value=data.notes||'';
-    $('book').textContent='💾 Save changes'; $('cancelEdit').style.display='inline-flex'; window.scrollTo({top:0,behavior:'smooth'});
   });
-}
-$('cancelEdit').onclick = ()=>{ editingId=null; $('book').textContent='➕ Book now'; $('cancelEdit').style.display='none'; setMsg('Edit cancelled.',true); };
+});
 
+/* ========= Delete ========= */
 async function removeBooking(id){
   if(!confirm('Delete this booking?')) return;
-  const { error } = await supabase.from('bookings').delete().eq('id', id);
-  if(error){ setMsg('Delete failed: ' + error.message); } else { setMsg('Deleted.', true); listBookings(); }
+  const { error } = await supabaseClient.from('bookings').delete().eq('id', id);
+  if(error) setMsg(error.message);
+  else { setMsg('Deleted.', true); listBookings(); }
 }
 
-// realtime
-supabase.channel('bookings-changes').on('postgres_changes', { event:'*', schema:'public', table:'bookings' }, ()=> listBookings()).subscribe();
-
-// copy sql
-document.getElementById('copySql').onclick = async ()=>{ try{ await navigator.clipboard.writeText(document.getElementById('sql').value); document.getElementById('sqlMsg').textContent='Copied!'; }catch{ document.getElementById('sqlMsg').textContent='Copy failed'; } };
-
-// init
-(function(){ document.getElementById('date').value = new Date().toISOString().slice(0,10); listBookings(); })();
+/* ========= Realtime ========= */
+supabaseClient
+  .channel('bookings-changes')
+  .on('postgres_changes',{event:'*',schema:'public',table:'bookings'},listBookings)
+  .subscribe();
 </script>
 </body>
 </html>
